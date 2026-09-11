@@ -1,0 +1,22 @@
+# Most exclusions are declared by the `files` field in package.json, which is an allowlist and
+# therefore the authoritative control. This file adds defences for the case where `npm pack` runs
+# from a working copy that has accumulated local state.
+#
+# The Mode state file is OPERATOR STATE, not part of the package. Shipping it would hand every
+# user whatever mode the publisher happened to be in.
+permissions.json
+permissions.json.*
+*.permissions.json
+
+# Local test profiles, tarballs and npm debug logs.
+*.tgz
+npm-debug.log*
+pg-install-test/
+.tmp/
+
+# Editor and OS noise.
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

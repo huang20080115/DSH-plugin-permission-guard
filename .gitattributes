@@ -1,0 +1,38 @@
+# Line-ending policy.
+#
+# WHY THIS MATTERS HERE SPECIFICALLY
+#
+# This repository was developed on Windows, where the editor wrote CRLF into some files and LF into
+# others — the sources are mixed. Without a policy, git normalises on commit in a way that depends on
+# each developer's `core.autocrlf`, so a fresh clone on Linux can show the entire tree as modified,
+# and a Windows contributor can accidentally commit a whole-file line-ending change.
+#
+# `text=auto` stores text in the repository as LF and checks it out using the platform default, which
+# is the conventional choice: the repository has one representation and each platform gets its own
+# working-tree form.
+* text=auto
+
+# Scripts that must keep LF even on Windows. The installer is executed directly by `npx`; a CRLF
+# shebang line makes it unrunnable on POSIX systems.
+*.js text eol=lf
+*.json text eol=lf
+*.yml text eol=lf
+*.yaml text eol=lf
+
+# Markdown keeps LF as well. It is mixed in this repository today; pinning it means a later edit
+# cannot silently reflow an entire document as a line-ending diff.
+*.md text eol=lf
+
+# Binary: never touched, never diffed.
+*.png binary
+*.jpg binary
+*.jpeg binary
+*.gif binary
+*.ico binary
+*.tgz binary
+*.woff binary
+*.woff2 binary
+
+# Keep GitHub's linguist from counting generated or vendored content in the language breakdown.
+package-lock.json linguist-generated=true
+pnpm-lock.yaml linguist-generated=true

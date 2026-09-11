@@ -1,0 +1,21 @@
+# The permission-guard bundle patch: one insert over whatever the profile already has.
+#
+# HOW THIS GETS APPLIED
+#
+# A profile composes its configuration tree from, in order: the patch of every package
+# listed in `dsh.profile.bundles`, then the profile's own cordis.patch.yml, then the
+# home-level one. This file is the `dsh.bundle.patch` declared in package.json, so it is
+# applied automatically once the package is a bundle of the profile — no manual edit of the
+# profile's own cordis.patch.yml is needed, which is why this package can be installed by a
+# single package-manager command.
+#
+# The row `name` is THIS package's name. The loader resolves it against the profile's
+# node_modules, where the package manager just placed it, so the row resolves to this
+# package's `main` (index.js). Pointing at a relative file path would not work from a bundle
+# patch: the path would be resolved against the patch file, not against the profile.
+#
+# `id` is the stable identity. A user who wants to override or disable this row can address
+# it by this id from their own cordis.patch.yml, because their layer is applied last.
+- insert:
+    - id: permission-guard
+      name: dsh-plugin-permission-guard

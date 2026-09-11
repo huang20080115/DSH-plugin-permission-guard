@@ -1,0 +1,24 @@
+# Operator state, not source.
+#
+# `permissions.json` is the plugin's mode state file. It is written beside index.js at runtime, and
+# it holds whatever mode THIS machine's operator chose — committing it would impose that mode on
+# anyone who clones the repository, and would publish a state file that the self-escalation fence
+# exists to protect.
+permissions.json
+permissions.json.*
+*.permissions.json
+
+# Packed tarballs and npm diagnostics.
+*.tgz
+npm-debug.log*
+
+# Local test profiles and scratch directories used by the end-to-end install test.
+pg-install-test/
+.tmp/
+
+# Editor and OS noise.
+.DS_Store
+Thumbs.db
+*.swp
+.idea/
+.vscode/

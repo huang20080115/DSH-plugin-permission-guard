@@ -1,0 +1,71 @@
+{
+  "name": "dsh-plugin-permission-guard",
+  "version": "1.0.0",
+  "private": false,
+  "description": "Four-mode file-permission fence for DeepSeek Harness (workspace read/write x outside read/write), enforced at the tool layer, with a read-only composer mode indicator and a locale-aware UI.",
+  "keywords": [
+    "dsh",
+    "deepseek-harness",
+    "cordis",
+    "plugin",
+    "permissions",
+    "sandbox",
+    "security"
+  ],
+  "type": "commonjs",
+  "main": "index.js",
+  "exports": {
+    ".": {
+      "default": "./index.js"
+    },
+    "./client": {
+      "default": "./client.js"
+    },
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "bin": {
+    "dsh-permission-guard": "./bin/install.js"
+  },
+  "files": [
+    "index.js",
+    "sync.js",
+    "modes.js",
+    "client.js",
+    "cordis.patch.yml",
+    "bin/install.js",
+    "README.md",
+    "Development process.md",
+    "LICENSE"
+  ],
+  "scripts": {
+    "test": "node test/test-matrix.js && node test/test-boot-safety.js && node test/test-client-contract.js && node test/test-module-resolution.js"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "platform": "web"
+    }
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "license": "MIT",
+  "author": {
+    "name": "bluemika",
+    "email": "huang20080115@outlook.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/huang20080115/DSH-plugin-permission-guard.git"
+  },
+  "bugs": {
+    "url": "https://github.com/huang20080115/DSH-plugin-permission-guard/issues"
+  },
+  "homepage": "https://github.com/huang20080115/DSH-plugin-permission-guard#readme",
+  "publishConfig": {
+    "access": "public"
+  }
+}
