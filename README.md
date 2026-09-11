@@ -1,4 +1,5 @@
 # dsh-plugin-permission-guard
+# tip:This plugin is entirely made by DeepSeek Harness
 
 A four-mode file-permission fence for [DeepSeek Harness](https://github.com/deepseek-ai/deepseek-harness), enforced at the tool layer, with a read-only indicator in the composer.
 
