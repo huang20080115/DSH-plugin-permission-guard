@@ -21,6 +21,18 @@ const path = require('node:path')
  * two from drifting apart.
  */
 const ROOT = path.join(__dirname, '..')
+
+/**
+ * A genuine blocking sleep.
+ *
+ * `Atomics.wait` on a throwaway `SharedArrayBuffer` really blocks, unlike a busy loop. This suite is
+ * CommonJS so top-level `await` is unavailable, and the watcher test needs to let a debounce timer
+ * expire before asserting that nothing extra was pushed.
+ */
+function sleep(ms) {
+  const signal = new Int32Array(new SharedArrayBuffer(4))
+  Atomics.wait(signal, 0, 0, ms)
+}
 const plugin = require(path.join(ROOT, 'index.js'))
 const modes = require(path.join(ROOT, 'modes.js'))
 const sync = require(path.join(ROOT, 'sync.js'))
@@ -149,6 +161,25 @@ globalThis.harness = {
   handle: function (method, fn) { handlers.set(method, fn); return function () {} },
   defineTool: function (d) { return d },
   registerTool: function () { return function () {} },
+}
+
+/**
+ * Capture every `fs.watch` the plugin registers, from the MAIN mount onward.
+ *
+ * Installed BEFORE `plugin.apply(ctx)` on purpose. The watcher test needs the callback the REAL
+ * instance registered; an earlier version patched `fs.watch` only around a second, throwaway mount
+ * and then drove THAT instance's watcher, whose pushes went to its own sessions rather than the ones
+ * this suite observes. The push looked absent when it was merely being delivered elsewhere.
+ *
+ * Only the state-file watcher is intercepted: the filter keeps any other watch a future change might
+ * add from being captured and misread.
+ */
+const capturedWatchers = []
+const realFsWatch = fs.watch
+fs.watch = function (watched, options, listener) {
+  const watcher = { dir: String(watched), listener: listener }
+  capturedWatchers.push(watcher)
+  return realFsWatch.call(fs, watched, options, listener)
 }
 
 plugin.apply(ctx)
@@ -824,6 +855,58 @@ console.log('--- old <-> new sync ---')
   const noEcho = currentOnDisk() === modeNow && sync.stats.skippedEcho > beforeEcho
   if (!noEcho) failures += 1
   console.log((noEcho ? 'PASS' : 'FAIL') + ' | an event observed inside apply-scope is ignored (echo suppressed)')
+
+  // 5b. AN OPERATOR EDITING THE STATE FILE must push the new mode to the kernel.
+  //
+  // This is the reported "new -> old does not work". new -> old used to fire only from the
+  // permission_mode TOOL, while the documented human procedure is to edit the state file — a path
+  // on which no code ran at all. Field evidence: oldToNew=2, newToOld=0, echoSuppressed=0.
+  //
+  // The watcher is driven by invoking the callback `fs.watch` was registered with, rather than by
+  // writing files and waiting for a real notification. A test that depends on filesystem
+  // notification latency is flaky on Windows, and a flaky test is one people learn to ignore.
+  // Invoking the captured callback exercises the SAME function a real event invokes, including the
+  // debounce and the applyToOld call.
+  {
+    // 5b-i. The fallback workspace must not be the APPLICATION INSTALL DIRECTORY.
+    //
+    // Observed in the field as `fallbackWorkspace: "C:/Program Files/DSH Desktop Beta"`, which is
+    // where `process.cwd()` lands on DSH Desktop. Any execution reaching that fallback would have
+    // had the operator's real workspace classified as OUTSIDE. Asserted on the source text because
+    // the value depends on the host environment, not on anything this suite can set.
+    const source = fs.readFileSync(path.join(ROOT, 'index.js'), 'utf8')
+    // `[^}]*` stops at the first closing brace: this function contains no nested braces, whereas a
+    // lazy `[\s\S]*?` bounded by `\n}` ran past the function and swept in the REST of the file —
+    // whose `process.cwd()` mentions made a correct implementation report as failing.
+    const fallbackBody = /function fallbackWorkspace\(\)\s*\{([^}]*)\}/.exec(source)
+    const body = fallbackBody === null ? '' : fallbackBody[1]
+    const usesHome = /os\.homedir\(\)/.test(body)
+    const usesCwd = /process\.cwd\(\)/.test(body)
+    if (!usesHome || usesCwd) failures += 1
+    console.log((usesHome && !usesCwd ? 'PASS' : 'FAIL')
+      + ' | the fallback workspace is the home directory, not process.cwd() (the install dir on Desktop)'
+      + (usesHome && !usesCwd ? '' : ' | body=' + body.replace(/\s+/g, ' ').slice(0, 100)))
+
+    const watcher = capturedWatchers[0]
+    const registered = watcher !== undefined && typeof watcher.listener === 'function'
+    if (!registered) failures += 1
+    console.log((registered ? 'PASS' : 'FAIL') + ' | a state-file watcher is registered'
+      + (registered ? ' | dir=' + path.basename(watcher.dir) : ''))
+
+    // The BEHAVIOUR (an edit pushes the mode to the kernel) is asserted in test-watch-sync.js.
+    //
+    // It cannot live here. The push is debounced by a timer, and this suite is synchronous: blocking
+    // with `Atomics.wait` to let that timer expire blocks the very event loop the timer needs, so
+    // the push never runs while the assertion is looking. Attempting it here produced a false
+    // failure against working code — the wrong lesson to leave in a suite.
+    if (registered) {
+      const watchedDir = path.dirname(STATE_FILE)
+      const sameDir = watcher.dir === watchedDir
+      if (!sameDir) failures += 1
+      console.log((sameDir ? 'PASS' : 'FAIL')
+        + ' | the watcher watches the DIRECTORY, so an atomic save (write + rename) is still seen')
+    }
+  }
 
   // 6. A session created later starts from the composition default; the status
   //    report must say so rather than implying full coverage.

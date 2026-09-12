@@ -17,6 +17,7 @@
  */
 
 const fs = require('node:fs')
+const os = require('node:os')
 const path = require('node:path')
 const modes = require('./modes.js')
 const sync = require('./sync.js')
@@ -47,16 +48,33 @@ const STATE_FILE = path.join(__dirname, 'permissions.json')
  * Resolution order, most authoritative first:
  *   1. `exec.agent.session.header.cwd` — the session's real workspace. Measured to be exact.
  *   2. `DSH_PERMISSION_GUARD_WORKSPACE` — an explicit operator override for unusual setups.
- *   3. `process.cwd()` — the deployment's working directory, which is a better guess than
- *      another machine's path, and is what the upstream tools fall back to as well.
+ *   3. the user's home directory.
  *
- * A wrong value here can only ever affect the FALLBACK case: whenever a session cwd exists it
- * wins, so a misconfigured constant cannot override a correctly identified session.
+ * WHY NOT `process.cwd()`. It was the third step, and on DSH Desktop it resolves to the
+ * APPLICATION INSTALL DIRECTORY — observed in the field as
+ * `fallbackWorkspace: "C:/Program Files/DSH Desktop Beta"`. That is not a workspace anyone works
+ * in, so any execution that reached the fallback would have had the operator's real workspace
+ * classified as OUTSIDE, producing false denials against their own files. A fallback is supposed to
+ * be a plausible location; the install directory is not one.
+ *
+ * The home directory is chosen because it is guaranteed to sit OUTSIDE any session workspace, so a
+ * misclassification here denies rather than permits. That is the direction to fail in: a false
+ * denial is visible and recoverable, a false allow is neither. It is also stable, exists on every
+ * platform, and needs no probing.
+ *
+ * This value can only ever affect the FALLBACK case: whenever a session cwd exists it wins, so a
+ * misconfigured fallback cannot override a correctly identified session.
  */
 function fallbackWorkspace() {
   const override = process.env.DSH_PERMISSION_GUARD_WORKSPACE
   if (typeof override === 'string' && override !== '') return normalizePath(override)
-  return normalizePath(process.cwd())
+  try {
+    return normalizePath(os.homedir())
+  } catch (error) {
+    // No home directory is close to unthinkable, but returning a path that certainly cannot be a
+    // workspace keeps the failure mode on the deny side.
+    return normalizePath(path.parse(process.cwd()).root || process.cwd())
+  }
 }
 
 /**
@@ -1183,7 +1201,87 @@ const plugin = {
         return function () { syncPush = null }
       }, 'permission-guard: new->old push')
 
-      sync.report('armed', 'old->new via session/event; new->old applies to every live session')
+      // ------------------------------------------------------------ external file edits
+      //
+      // THE PATH THAT HAD NO HOOK, AND THE REPORTED "new -> old does not work".
+      //
+      // new -> old used to fire only from the `permission_mode` tool. But the UI indicator is a
+      // read-only display BY DESIGN (a write route reachable over loopback would be a
+      // self-escalation path, since HTTP never passes through tools/pre-execute), so the documented
+      // human procedure is to edit the state file. That procedure changed the new mode and pushed
+      // NOTHING, because no code runs on a file edit.
+      //
+      // Field report: oldToNew=2, newToOld=0, echoSuppressed=0 — the operator had switched twice
+      // through the built-in selector (which the session/event hook catches) and had set the new
+      // mode by editing the file (which nothing caught). Not a broken direction; a missing trigger.
+      //
+      // A human edit is authoritative and is pushed even when it WIDENS, unlike a model-initiated
+      // switch. That is not a hole: the state file is protected by the self-escalation fence, and a
+      // widening edit is only reachable by someone who can write the file — i.e. the operator. The
+      // guard that refuses a model's widening tool call is aimed at the TOOL path, which is
+      // untouched by this.
+      //
+      // Lossy-rounding guard: 3 and 2 both map to `workspace-write`, so changing 3 -> 2 alters no
+      // kernel state. The push is skipped when the kernels already agree, which also prevents the
+      // pointless log line and the wasted session events.
+      let lastPushed = null
+      let watchTimer = null
+
+      function sandboxAlreadyApplied(mode) {
+        const sandbox = sync.NEW_TO_OLD_SANDBOX[mode.id]
+        const live = sessions.list()
+        if (!Array.isArray(live) || live.length === 0) return false
+        for (let i = 0; i < live.length; i++) {
+          if (sandboxPolicyOverride(live[i]) !== sandbox) return false
+        }
+        return true
+      }
+
+      function onStateFileChanged() {
+        try {
+          if (sync.inApply()) return                       // our own write; already applied
+          const mode = loadMode()
+          if (lastPushed !== null && mode.id === lastPushed) return
+          const previous = lastPushed
+          lastPushed = mode.id
+          if (sandboxAlreadyApplied(mode)) {
+            sync.report('file->old skipped', 'mode ' + mode.id + ' already applied to the kernel'
+              + (previous === null ? ' (initial read)' : ''))
+            return
+          }
+          sync.report('file->old', 'state file changed' + (previous === null ? ' (initial read)' : '')
+            + ' -> mode ' + mode.id + '; pushing to the kernel')
+          if (syncPush !== null) syncPush(mode, 'state file changed by the operator')
+        } catch (error) {
+          sync.report('file->old failed', String(error))
+        }
+      }
+
+      syncCtx.effect(function () {
+        let watcher = null
+        const directory = path.dirname(STATE_FILE)
+        const base = path.basename(STATE_FILE)
+        try {
+          // The DIRECTORY is watched, not the file. Many editors save by writing a temporary file
+          // and renaming it over the original, which breaks a watch placed on the file itself. A
+          // directory watch survives the replacement, and the basename filter keeps it specific.
+          watcher = fs.watch(directory, { persistent: false }, function (eventType, filename) {
+            if (filename !== null && String(filename) !== base) return
+            if (watchTimer !== null) clearTimeout(watchTimer)
+            watchTimer = setTimeout(onStateFileChanged, 150)
+          })
+        } catch (error) {
+          console.error('[permission-guard] could not watch the state file; editing it will no '
+            + 'longer sync to the kernel sandbox:', String(error))
+        }
+        return function () {
+          if (watchTimer !== null) { clearTimeout(watchTimer); watchTimer = null }
+          if (watcher !== null) watcher.close()
+        }
+      }, 'permission-guard: state-file edit -> old')
+
+      sync.report('armed', 'old->new via session/event; new->old via the tool, and via state-file '
+        + 'edits (watched); new->old applies to every live session')
     })
 
     console.log('[permission-guard] active; state file =', STATE_FILE, '; mode =', currentMode().id)

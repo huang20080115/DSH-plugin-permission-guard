@@ -57,7 +57,12 @@ try {
   if (!present) { throw new Error('nothing further can be checked') }
 
   const manifest = JSON.parse(fs.readFileSync(installedManifest, 'utf8'))
-  check('version is 1.0.1', manifest.version === '1.0.1', manifest.version)
+  // Read the expected version from the SOURCE manifest instead of repeating a literal. A hard-coded
+  // "1.0.1" here failed the moment the version was bumped — the same expired-literal trap that has
+  // now bitten this project three times, each time producing a failure against correct code.
+  const sourceManifest = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'package.json'), 'utf8'))
+  check('the installed version matches the source manifest',
+    manifest.version === sourceManifest.version, manifest.version + ' vs ' + sourceManifest.version)
   check('declares dsh.bundle.patch (how the harness learns to apply its patch)',
     manifest.dsh && manifest.dsh.bundle && manifest.dsh.bundle.patch === './cordis.patch.yml',
     JSON.stringify(manifest.dsh && manifest.dsh.bundle))

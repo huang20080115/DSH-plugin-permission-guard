@@ -1,6 +1,6 @@
 {
   "name": "dsh-plugin-permission-guard",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "private": false,
   "description": "Four-mode file-permission fence for DeepSeek Harness (workspace read/write x outside read/write), enforced at the tool layer, with a read-only composer mode indicator and a locale-aware UI.",
   "keywords": [
@@ -39,7 +39,7 @@
     "LICENSE"
   ],
   "scripts": {
-    "test": "node test/test-matrix.js && node test/test-boot-safety.js && node test/test-client-contract.js && node test/test-module-resolution.js && node test/probe-route-disclosure.js"
+    "test": "node test/test-matrix.js && node test/test-watch-sync.js && node test/test-boot-safety.js && node test/test-client-contract.js && node test/test-module-resolution.js && node test/probe-route-disclosure.js"
   },
   "dsh": {
     "bundle": {

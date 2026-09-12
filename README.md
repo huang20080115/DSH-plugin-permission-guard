@@ -100,8 +100,20 @@ Both are optional.
 
 | Setting | Default | Purpose |
 |---|---|---|
-| `DSH_PERMISSION_GUARD_WORKSPACE` | `process.cwd()` | The workspace used **only** when a tool call carries no session working directory. A real session cwd always wins, so this never overrides a correctly identified session. |
+| `DSH_PERMISSION_GUARD_WORKSPACE` | the user's home directory | The workspace used **only** when a tool call carries no session working directory. A real session cwd always wins, so this never overrides a correctly identified session. The default is deliberately a location that cannot be a workspace, so a fallback misclassification denies rather than permits. |
 | `DSH_TOOLS_MODE` | harness default | Not read by this plugin; mentioned only because mode 3's "outside readable" dimension interacts with how the harness presents tools. |
+
+## Keeping the harness sandbox in step
+
+The harness has its own three-value sandbox mode, and this plugin keeps the two in step in both directions:
+
+- **Harness → plugin.** Changing the harness's own permission selector updates this plugin's mode.
+- **Plugin → harness.** Changing this plugin's mode updates the harness sandbox of every live session. This happens when you edit `permissions.json` by hand, when the `permission_mode` tool switches modes, and on the initial read at startup.
+
+Two consequences worth knowing:
+
+- The mapping is lossy. The harness mode tracks **writes only**, so modes 2 and 3 both map to `workspace-write` on that side; only the plugin distinguishes "outside readable". A new session inherits the composition default until it is switched, because the harness mode is per-session while this plugin's mode is process-global.
+- Editing the file is a **human** action, and is pushed to the harness even when it widens access. The guard that refuses a model's widening `permission_mode` call is aimed at the tool path; the state file is protected separately by the self-escalation fence.
 
 ## What this is not
 
