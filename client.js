@@ -52,10 +52,19 @@ window.__ModuleLoader__.load({
 		 * state file in English; this table only maps a mode id to its localized display
 		 * text. That keeps one source for the mode set and one source for its translation.
 		 */
+		// The note names ONLY mechanisms that actually exist.
+		//
+		// It used to say "use the permission_mode tool", which was wrong in practice: the tool is
+		// registered on the host, but it never reaches the model's tool list, so anyone following that
+		// advice finds no such tool. Pointing at something unusable is worse than saying less.
+		//
+		// Both surviving routes work because the plugin keeps the harness sandbox in step in both
+		// directions: the built-in selector changes the harness mode and the plugin follows it, and
+		// editing the file is watched and pushed to the harness.
 		const EN = {
 			label: "Permission",
 			readFailed: "Read failed: ",
-			note: "Read-only display. Use the permission_mode tool to switch, or edit permissions.json.",
+			note: "Read-only display. Switch with the built-in permission selector, or by editing permissions.json.",
 			tooltip: "Current file-permission mode",
 			modes: {
 				1: { name: "Workspace read", detail: "workspace: read; outside: none" },
@@ -68,7 +77,7 @@ window.__ModuleLoader__.load({
 		const ZH = {
 			label: "权限",
 			readFailed: "读取失败：",
-			note: "只读显示。切换档位请用 permission_mode 工具，或编辑 permissions.json。",
+			note: "只读显示。切换档位请用内置的权限选择器，或编辑 permissions.json。",
 			tooltip: "当前文件权限档位",
 			modes: {
 				1: { name: "工作区查看", detail: "工作区可读，非工作区不可读" },

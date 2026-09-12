@@ -82,16 +82,19 @@ The installer is preferred: it verifies the installed manifest before declaring 
 
 ## Switching modes
 
-The mode lives in `permissions.json`, beside the plugin's own `index.js`. Three ways to change it, all effective immediately:
+The mode lives in `permissions.json`, beside the plugin's own `index.js`. Two ways to change it, both effective immediately:
 
-- **The permission indicator** in the composer — click it.
-- **Edit the file** with any editor. Change `mode` to 1, 2, 3 or 4. This is a human action and does not go through the tool fence, which is deliberate: it is the escape hatch when everything else is misconfigured.
-- **The `permission_mode` tool** — for reporting, and for *narrowing* the mode. See below.
+- **The built-in permission selector** in the composer. It sets the harness's own sandbox mode, and this plugin follows it — that direction has always worked.
+- **Edit the file** with any editor. Change `mode` to 1, 2, 3 or 4. The file is watched, so the change is pushed to the harness sandbox of every live session. This is a human action and does not go through the tool fence, which is deliberate: it is the escape hatch when everything else is misconfigured.
+
+The indicator this plugin adds to the composer is a **read-only display**. It shows the current mode and lists the four; it does not switch.
+
+> **About the `permission_mode` tool.** The plugin registers it for reporting, and it is enforced by a monotonic `tools.guard`. In practice it does not reach the model's tool list, so the model cannot call it — which is why it is not listed as a way to switch. Nothing depends on it: the two routes above are what the plugin's own sync actually keys on.
 
 ### What the model can and cannot do
 
 - **The model cannot widen its own mode.** A `permission_mode` call that would extend the model's file access is refused by a `tools.guard` check, and every write to a mode file is refused by a self-escalation fence — including writes through `node -e`, shell scripts, or a hard-link alias in another directory.
-- **The model *can* narrow it.** Giving up access the model already has is not an escalation, and refusing it would block a legitimate containment action.
+- **The model *can* narrow it**, if it can reach the tool at all. Giving up access the model already has is not an escalation, and refusing it would block a legitimate containment action.
 - **Reporting is always allowed.**
 
 ## Configuration

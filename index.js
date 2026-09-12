@@ -947,8 +947,8 @@ const plugin = {
         console.error('[permission-guard] tools.guard is unavailable on this DSH build. The '
           + 'permission_mode tool is therefore REPORT-ONLY: switch requests are refused, because '
           + 'allowing them would let the model raise its own permissions. The file-access fence '
-          + 'itself is unaffected. Switch modes as a human via the composer indicator or the state '
-          + 'file.')
+          + 'itself is unaffected. To switch modes as a human, use the built-in permission selector '
+          + '(the plugin follows it) or edit the state file (it is watched).')
       }
 
       toolsCtx.tools.register({
@@ -1002,8 +1002,9 @@ const plugin = {
               reason: 'Mode switching through this tool is disabled because this DSH build does not '
                 + 'expose tools.guard, the monotonic seam that prevents a tool call from widening the '
                 + 'model\'s own access. Without it, allowing a switch would let the model raise its own '
-                + 'permissions. Reporting still works. Switch modes as a human: the permission '
-                + 'indicator in the composer, or by editing the state file named below.',
+                + 'permissions. Reporting still works. To switch modes as a human, use the built-in '
+                + 'permission selector (the plugin follows it) or edit the state file named below '
+                + '(it is watched).',
               stateFile: STATE_FILE,
               capabilities: statusReport(exec).capabilities,
             }

@@ -356,6 +356,24 @@ if (factory === undefined) {
       if (!zhModes) failures += 1
       console.log((zhModes ? 'PASS' : 'FAIL') + ' | the open panel lists all four modes in Chinese (' + zhPanel.slice(0, 48) + '...)')
 
+      // THE UI MUST NOT NAME A MECHANISM THAT DOES NOT EXIST.
+      //
+      // The note used to say "use the permission_mode tool". The tool is registered on the host, but
+      // it never reaches the model's tool list, so a reader following that advice finds nothing.
+      //
+      // The note only renders on the OPEN panel, so this reads the panel text rather than the collapsed
+      // indicator. Asserting against the collapsed render was this check's first version, and it would
+      // have passed or failed for the wrong reason.
+      const mentionsTool = zhPanel.indexOf('permission_mode') !== -1
+      if (mentionsTool) failures += 1
+      console.log((mentionsTool ? 'FAIL' : 'PASS') + ' | the panel note does not point at the permission_mode tool')
+
+      const namesSelector = zhPanel.indexOf('选择器') !== -1
+      const namesFile = zhPanel.indexOf('permissions.json') !== -1
+      if (!namesSelector || !namesFile) failures += 1
+      console.log((namesSelector && namesFile ? 'PASS' : 'FAIL')
+        + ' | the panel note names both real routes (selector=' + namesSelector + ', file=' + namesFile + ')')
+
       activeLocale = 'en'
       const enPanel = renderPanelText()
       const enModes = enPanel.indexOf('Workspace read') !== -1 && enPanel.indexOf('Full access') !== -1
