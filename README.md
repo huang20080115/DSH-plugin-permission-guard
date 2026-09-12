@@ -18,7 +18,9 @@ A fresh install starts at **mode 2**, which is exactly what the harness's own de
 
 ## Requirements
 
-- **DeepSeek Harness with `tools.guard`.** This plugin puts its mode-switch control on the monotonic `tools.guard` seam, documented as *"no guard can force-allow a call another guard denied"* — the property a self-escalation control needs. On a build that does not expose `guard()`, the file fence still works, but the `permission_mode` tool becomes a self-escalation path. Rather than fail silently, the plugin reports it:
+- **DeepSeek Harness with `tools.guard`.** This plugin puts its mode-switch control on the monotonic `tools.guard` seam, documented as *"no guard can force-allow a call another guard denied"* — the property a self-escalation control needs.
+
+  On a build without `guard()`, the file fence still works and the `permission_mode` tool still reports — but **the tool refuses every switch request**. It does not perform the switch and then mention that it could not prevent it; a control that degrades to "allowed, but logged" is not a control. Mode changes then come only from a human: the composer indicator, or the state file.
 
   ```
   permission_mode → { capabilities: {
@@ -26,7 +28,7 @@ A fresh install starts at **mode 2**, which is exactly what the harness's own de
       modeSwitchControl: "INACTIVE — this DSH build does not expose tools.guard, ..." } }
   ```
 
-  Check that field after installing. If it says `INACTIVE`, upgrade the harness.
+  Check that field after installing. If it says `INACTIVE`, switch modes as a human, or upgrade the harness.
 
 - **Node.js 20 or newer.** The installer runs under `npx`.
 - **pnpm available.** The installer uses it to place the package; DSH Desktop's own terminal puts the bundled pnpm on `PATH`.

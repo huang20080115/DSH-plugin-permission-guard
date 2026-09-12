@@ -12,6 +12,11 @@ permissions.json.*
 *.tgz
 npm-debug.log*
 
+# Scratch files used to compose commit messages. One of these WAS committed by accident, because
+# `git add -A` ran while it existed; ignoring the pattern is what stops that recurring.
+.commit-msg.tmp
+*.commit-msg.tmp
+
 # Local test profiles and scratch directories used by the end-to-end install test.
 pg-install-test/
 .tmp/

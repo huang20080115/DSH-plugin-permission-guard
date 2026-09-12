@@ -337,6 +337,88 @@ console.log('--- mode-switch guard (a tool call must not widen the model\'s own 
   }
 }
 
+// FAIL-CLOSED WHEN tools.guard IS ABSENT.
+//
+// This asserts the behaviour that a static analysis service flagged as a material weakening: with
+// no guard seam available, `permission_mode` used to still change the mode and merely report that it
+// could not stop itself — fail-OPEN for the one operation this plugin exists to prevent.
+//
+// It needs a SEPARATE plugin instance mounted against a context whose `tools` service has no
+// `guard`, which is why it cannot reuse the suite's main instance.
+console.log('--- fail-closed: no tools.guard => the tool must REFUSE to switch ---')
+{
+  const modeBefore = currentOnDisk()
+  try {
+    // Mount a fresh copy whose tools service deliberately lacks `guard`.
+    delete require.cache[require.resolve(path.join(ROOT, 'index.js'))]
+    const fresh = require(path.join(ROOT, 'index.js'))
+    const tools = []
+    const svc = {
+      tools: {
+        register: function (t) { tools.push(t) },
+        get: function () { return {} },
+        schemas: function () { return [] },
+        // NOTE: no `guard` method. That is the whole point.
+      },
+      systemPrompt: { section: function () {} },
+      webServer: { register: function () { return function () {} } },
+      sessions: { list: function () { return [] }, get: function () { return undefined } },
+      approval: { setPolicy: function () {}, request: function () { return Promise.resolve('unavailable') } },
+      web: { fetch: async function () {}, search: async function () {} },
+    }
+    const noGuardCtx = {
+      on: function () { return function () {} },
+      effect: function (fn) { try { fn() } catch (e) {} return function () {} },
+      get: function (n) { return svc[n] },
+      provide: function () { return function () {} },
+      inject: function (deps, cb) {
+        const scoped = Object.assign({}, svc)
+        scoped.get = function (n) { return svc[n] }
+        scoped.effect = noGuardCtx.effect
+        scoped.on = function () { return function () {} }
+        scoped.inject = function () { return function () {} }
+        scoped.provide = function () { return function () {} }
+        if (typeof cb === 'function') cb(scoped)
+        return function () {}
+      },
+    }
+    fresh.apply(noGuardCtx)
+
+    const set = tools.find(function (t) { return t.name === 'permission_mode' })
+    const mounted = set !== undefined
+    if (!mounted) failures += 1
+    console.log((mounted ? 'PASS' : 'FAIL') + ' | the tool still registers without tools.guard (reporting stays available)')
+
+    if (mounted) {
+      const report = set.execute({}, {})
+      const reports = report && report.current && typeof report.current.id === 'number'
+      if (!reports) failures += 1
+      console.log((reports ? 'PASS' : 'FAIL') + ' | reporting still works without the guard')
+
+      const caps = report && report.capabilities ? report.capabilities : {}
+      const saysInactive = caps.toolsGuard === false
+      if (!saysInactive) failures += 1
+      console.log((saysInactive ? 'PASS' : 'FAIL') + ' | the report states toolsGuard=false')
+
+      // Pick a target that DIFFERS from the current mode, so a switch would be observable.
+      const target = modeBefore === 4 ? 1 : 4
+      const attempt = set.execute({ mode: target }, {})
+      const refused = attempt && attempt.refused === true && attempt.ok === false
+      if (!refused) failures += 1
+      console.log((refused ? 'PASS' : 'FAIL') + ' | a switch attempt is REFUSED (fail-closed), not merely reported')
+
+      const unchanged = currentOnDisk() === modeBefore
+      if (!unchanged) failures += 1
+      console.log((unchanged ? 'PASS' : 'FAIL') + ' | the mode on disk is UNCHANGED after the refused attempt ('
+        + modeBefore + ')')
+    }
+  } finally {
+    // Restore the module cache so later assertions use the guarded instance again.
+    delete require.cache[require.resolve(path.join(ROOT, 'index.js'))]
+    fs.writeFileSync(STATE_FILE, JSON.stringify({ mode: modeBefore }, null, 2) + '\n', 'utf8')
+  }
+}
+
 // red.
 //
 // NOTE ON THE STRAY PATH. It is the LEGACY workspace-root location, chosen deliberately:

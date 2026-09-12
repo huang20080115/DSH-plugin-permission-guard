@@ -923,11 +923,14 @@ const plugin = {
           }
         })
       } else {
-        // LOUD, because the alternative is a silent hole: without the guard the tool remains
-        // a self-escalation path, and a quiet fallback would look identical to a protected one.
-        console.error('[permission-guard] tools.guard is unavailable; the permission_mode tool '
-          + 'remains a self-escalation path (a model can switch its own mode). Registrations that '
-          + 'must not be bypassable belong on the monotonic guard seam.')
+        // LOUD, and no longer merely advisory. The tool refuses switch requests entirely when this
+        // branch is taken (see the execute() guard), so the message states the actual consequence
+        // rather than warning about one that the user might assume was handled.
+        console.error('[permission-guard] tools.guard is unavailable on this DSH build. The '
+          + 'permission_mode tool is therefore REPORT-ONLY: switch requests are refused, because '
+          + 'allowing them would let the model raise its own permissions. The file-access fence '
+          + 'itself is unaffected. Switch modes as a human via the composer indicator or the state '
+          + 'file.')
       }
 
       toolsCtx.tools.register({
@@ -958,6 +961,36 @@ const plugin = {
         execute: function (args, exec) {
           const requested = args && args.mode
           if (requested === undefined || requested === null) return statusReport(exec)
+
+          // FAIL CLOSED WHEN THE GUARD IS MISSING.
+          //
+          // This was previously a warning plus an active switch: without `tools.guard` the tool
+          // still changed the mode, and the plugin merely reported that it could not stop itself.
+          // That is fail-OPEN for the exact operation this plugin exists to prevent, and a static
+          // analysis service rated it a material weakening (socket.dev, 2026-09-11). The reasoning
+          // was wrong, not just the wording: "the model can widen its own access, but we log it"
+          // is not a control.
+          //
+          // Refusing costs little. An older harness build loses the ability to switch mode through
+          // the MODEL's tool call — which was never a supported operator workflow, since the human
+          // switches from the composer indicator or by editing the state file. What it preserves is
+          // the invariant the package advertises: the model cannot raise its own permissions, on
+          // any build, under any configuration.
+          if (!guardArmed) {
+            return {
+              action: 'switch',
+              ok: false,
+              refused: true,
+              reason: 'Mode switching through this tool is disabled because this DSH build does not '
+                + 'expose tools.guard, the monotonic seam that prevents a tool call from widening the '
+                + 'model\'s own access. Without it, allowing a switch would let the model raise its own '
+                + 'permissions. Reporting still works. Switch modes as a human: the permission '
+                + 'indicator in the composer, or by editing the state file named below.',
+              stateFile: STATE_FILE,
+              capabilities: statusReport(exec).capabilities,
+            }
+          }
+
           const found = modes.modeById(Number(requested))
           if (found === undefined) {
             return { action: 'switch', ok: false, reason: 'unknown mode id ' + String(requested), availableModes: modes.modeIdList() }
@@ -996,16 +1029,21 @@ const plugin = {
             return
           }
           const mode = currentMode()
-          // No requesting agent exists on an HTTP route, so no session workspace can be named.
-          // The payload therefore carries the resolved FALLBACK, clearly labelled, rather than
-          // the mode's id under a field called `workspace` — which is what it used to do, and
-          // which advertised a workspace the payload had nothing to do with. The client reads
-          // `id` and applies its own locale labels; it never used this field.
+          // NO FILESYSTEM PATHS IN THE RESPONSE.
+          //
+          // This payload used to include `fallbackWorkspace` — an absolute path from the server's
+          // machine. A static analysis service flagged it as path disclosure, and it was right on
+          // two counts. The disclosure itself is real: the route is reachable by anything that can
+          // reach the loopback web server, including the model's own shell via HTTP (which never
+          // passes through `tools/pre-execute`). And the field was pointless on top of that — the
+          // CLIENT reads `id` and derives its own localized labels, so nothing consumed it.
+          //
+          // The rule this endpoint now follows: it returns the mode, and nothing about WHERE the
+          // process runs. A status surface should not double as a filesystem probe.
           const payload = JSON.stringify({
             id: mode.id,
             name: mode.name,
             summary: mode.summary,
-            fallbackWorkspace: fallbackWorkspace(),
           })
           res.statusCode = 200
           res.setHeader('content-type', 'application/json; charset=utf-8')
